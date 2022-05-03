@@ -1,0 +1,730 @@
+{
+  "Resources": {
+    "ElasticBeanStalkApplication": {
+      "Type": "AWS::ElasticBeanstalk::Application",
+      "Properties": {
+        "ApplicationName": "cloud-crowd",
+        "Description": "Cloud Crowd Web Application"
+      },
+      "DependsOn": "BeanStalkPublicSubnet"
+    },
+    "ElasticBeanStalkURLShortenerApplication": {
+      "Type": "AWS::ElasticBeanstalk::Application",
+      "Properties": {
+        "ApplicationName": "cloud-crowd-url-shortener",
+        "Description": "Cloud Crowd URL Shortener Application"
+      },
+      "DependsOn": "URLShortenerPrivateSubnet"
+    },
+    "ElasticBeanStalkEnvironment": {
+      "Type": "AWS::ElasticBeanstalk::Environment",
+      "Properties": {
+        "OperationsRole": "arn:aws:iam::342353252634:role/beanstalk",
+        "ApplicationName": "cloud-crowd",
+        "EnvironmentName": "cloud-crowd-env",
+        "Description": "Cloud Crowd Environment",
+        "SolutionStackName": "64bit Amazon Linux 2 v3.4.13 running Docker",
+        "OptionSettings": [
+          {
+            "Namespace": "aws:autoscaling:launchconfiguration",
+            "OptionName": "IamInstanceProfile",
+            "Value": "aws-elasticbeanstalk-ec2-role"
+          },
+          {
+            "Namespace": "aws:ec2:vpc",
+            "OptionName": "VPCId",
+            "Value": {
+              "Ref": "VPC"
+            }
+          },
+          {
+            "Namespace": "aws:ec2:vpc",
+            "OptionName": "Subnets",
+            "Value": {
+              "Ref": "BeanStalkPublicSubnet"
+            }
+          }
+        ]
+      },
+      "DependsOn": "ElasticBeanStalkApplication"
+    },
+    "ElasticBeanStalkURLShortenerEnvironment": {
+      "Type": "AWS::ElasticBeanstalk::Environment",
+      "Properties": {
+        "CNAMEPrefix": "cloud-crowd-url-shortener",
+        "OperationsRole": "arn:aws:iam::342353252634:role/beanstalk",
+        "ApplicationName": "cloud-crowd-url-shortener",
+        "EnvironmentName": "cloud-crowd-env-url-shortener",
+        "Description": "Cloud Crowd URL Shortener Environment",
+        "SolutionStackName": "64bit Amazon Linux 2 v3.4.13 running Docker",
+        "OptionSettings": [
+          {
+            "Namespace": "aws:autoscaling:launchconfiguration",
+            "OptionName": "IamInstanceProfile",
+            "Value": "aws-elasticbeanstalk-ec2-role"
+          },
+          {
+            "Namespace": "aws:elasticbeanstalk:environment",
+            "OptionName": "LoadBalancerType",
+            "Value": "classic"
+          },
+          {
+            "Namespace": "aws:ec2:instances",
+            "OptionName": "InstanceTypes",
+            "Value": "t2.micro"
+          },
+          {
+            "Namespace": "aws:ec2:vpc",
+            "OptionName": "VPCId",
+            "Value": {
+              "Ref": "VPC"
+            }
+          },
+          {
+            "Namespace": "aws:ec2:vpc",
+            "OptionName": "Subnets",
+            "Value": {
+              "Ref": "URLShortenerPrivateSubnet"
+            }
+          },
+          {
+            "Namespace": "aws:ec2:vpc",
+            "OptionName": "ELBSubnets",
+            "Value": {
+              "Ref": "BeanStalkPublicSubnet"
+            }
+          }
+        ]
+      },
+      "DependsOn": "ElasticBeanStalkURLShortenerApplication"
+    },
+    "DynamoDBGroupTable": {
+      "Type": "AWS::DynamoDB::Table",
+      "Properties": {
+        "TableName": "group",
+        "KeySchema": [
+          {
+            "AttributeName": "id",
+            "KeyType": "HASH"
+          }
+        ],
+        "AttributeDefinitions": [
+          {
+            "AttributeName": "id",
+            "AttributeType": "S"
+          }
+        ],
+        "ProvisionedThroughput": {
+          "ReadCapacityUnits": 5,
+          "WriteCapacityUnits": 5
+        }
+      },
+      "DependsOn": "URLShortenerPrivateSubnet2"
+    },
+    "DynamoDBGroupFileTable": {
+      "Type": "AWS::DynamoDB::Table",
+      "Properties": {
+        "TableName": "group_file",
+        "KeySchema": [
+          {
+            "AttributeName": "group_id",
+            "KeyType": "HASH"
+          },
+          {
+            "AttributeName": "file_id",
+            "KeyType": "RANGE"
+          }
+        ],
+        "AttributeDefinitions": [
+          {
+            "AttributeName": "group_id",
+            "AttributeType": "S"
+          },
+          {
+            "AttributeName": "file_id",
+            "AttributeType": "S"
+          }
+        ],
+        "ProvisionedThroughput": {
+          "ReadCapacityUnits": 5,
+          "WriteCapacityUnits": 5
+        },
+        "GlobalSecondaryIndexes": [
+          {
+            "IndexName": "group_file_index",
+            "KeySchema": [
+              {
+                "AttributeName": "file_id",
+                "KeyType": "HASH"
+              },
+              {
+                "AttributeName": "group_id",
+                "KeyType": "RANGE"
+              }
+            ],
+            "Projection": {
+              "ProjectionType": "ALL"
+            },
+            "ProvisionedThroughput": {
+              "ReadCapacityUnits": 5,
+              "WriteCapacityUnits": 5
+            }
+          },
+          {
+            "IndexName": "group_url_index",
+            "KeySchema": [
+              {
+                "AttributeName": "file_id",
+                "KeyType": "HASH"
+              }
+            ],
+            "Projection": {
+              "ProjectionType": "KEYS_ONLY"
+            },
+            "ProvisionedThroughput": {
+              "ReadCapacityUnits": 5,
+              "WriteCapacityUnits": 5
+            }
+          }
+        ]
+      },
+      "DependsOn": "URLShortenerPrivateSubnet2"
+    },
+    "DynamoDBPermissionTable": {
+      "Type": "AWS::DynamoDB::Table",
+      "Properties": {
+        "TableName": "permission",
+        "KeySchema": [
+          {
+            "AttributeName": "group_id",
+            "KeyType": "HASH"
+          },
+          {
+            "AttributeName": "file_id",
+            "KeyType": "RANGE"
+          }
+        ],
+        "AttributeDefinitions": [
+          {
+            "AttributeName": "group_id",
+            "AttributeType": "S"
+          },
+          {
+            "AttributeName": "file_id",
+            "AttributeType": "S"
+          }
+        ],
+        "ProvisionedThroughput": {
+          "ReadCapacityUnits": 5,
+          "WriteCapacityUnits": 5
+        }
+      },
+      "DependsOn": "URLShortenerPrivateSubnet2"
+    },
+    "DynamoDBShortenedURLTable": {
+      "Type": "AWS::DynamoDB::Table",
+      "Properties": {
+        "TableName": "shortened_url",
+        "KeySchema": [
+          {
+            "AttributeName": "shortend_id",
+            "KeyType": "HASH"
+          }
+        ],
+        "AttributeDefinitions": [
+          {
+            "AttributeName": "shortend_id",
+            "AttributeType": "S"
+          }
+        ],
+        "GlobalSecondaryIndexes": [
+          {
+            "IndexName": "url_file_index",
+            "KeySchema": [
+              {
+                "AttributeName": "shortend_id",
+                "KeyType": "HASH"
+              }
+            ],
+            "Projection": {
+              "ProjectionType": "ALL"
+            },
+            "ProvisionedThroughput": {
+              "ReadCapacityUnits": 5,
+              "WriteCapacityUnits": 5
+            }
+          }
+        ],
+        "ProvisionedThroughput": {
+          "ReadCapacityUnits": 5,
+          "WriteCapacityUnits": 5
+        }
+      },
+      "DependsOn": "URLShortenerPrivateSubnet2"
+    },
+    "DynamoDBUserTable": {
+      "Type": "AWS::DynamoDB::Table",
+      "Properties": {
+        "TableName": "user",
+        "KeySchema": [
+          {
+            "AttributeName": "email",
+            "KeyType": "HASH"
+          }
+        ],
+        "AttributeDefinitions": [
+          {
+            "AttributeName": "email",
+            "AttributeType": "S"
+          }
+        ],
+        "ProvisionedThroughput": {
+          "ReadCapacityUnits": 5,
+          "WriteCapacityUnits": 5
+        }
+      },
+      "DependsOn": "URLShortenerPrivateSubnet2"
+    },
+    "DynamoDBUserGroupTable": {
+      "Type": "AWS::DynamoDB::Table",
+      "Properties": {
+        "TableName": "user_group",
+        "KeySchema": [
+          {
+            "AttributeName": "user_email",
+            "KeyType": "HASH"
+          },
+          {
+            "AttributeName": "group_id",
+            "KeyType": "RANGE"
+          }
+        ],
+        "AttributeDefinitions": [
+          {
+            "AttributeName": "user_email",
+            "AttributeType": "S"
+          },
+          {
+            "AttributeName": "group_id",
+            "AttributeType": "S"
+          }
+        ],
+        "GlobalSecondaryIndexes": [
+          {
+            "IndexName": "user_group_index",
+            "KeySchema": [
+              {
+                "AttributeName": "user_email",
+                "KeyType": "HASH"
+              },
+              {
+                "AttributeName": "group_id",
+                "KeyType": "RANGE"
+              }
+            ],
+            "Projection": {
+              "ProjectionType": "ALL"
+            },
+            "ProvisionedThroughput": {
+              "ReadCapacityUnits": 5,
+              "WriteCapacityUnits": 5
+            }
+          }
+        ],
+        "ProvisionedThroughput": {
+          "ReadCapacityUnits": 5,
+          "WriteCapacityUnits": 5
+        }
+      },
+      "DependsOn": "URLShortenerPrivateSubnet2"
+    },
+    "S3Bucket": {
+      "Type": "AWS::S3::Bucket",
+      "Properties": {
+        "BucketName": "cloud-crowd",
+        "PublicAccessBlockConfiguration": {
+          "BlockPublicAcls": false,
+          "BlockPublicPolicy": false,
+          "IgnorePublicAcls": false,
+          "RestrictPublicBuckets": false
+        }
+      }
+    },
+    "S3BucketPolicy": {
+      "Type": "AWS::S3::BucketPolicy",
+      "Properties": {
+        "Bucket": "cloud-crowd",
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "Statement1",
+              "Effect": "Allow",
+              "Principal": "*",
+              "Action": "s3:*",
+              "Resource": "arn:aws:s3:::cloud-crowd/*"
+            }
+          ]
+        }
+      },
+      "DependsOn": "S3Bucket"
+    },
+    "LambdaSendVerificationEmail": {
+      "Type": "AWS::Lambda::Function",
+      "Properties": {
+        "Handler": "index.handler",
+        "Runtime": "nodejs14.x",
+        "FunctionName": "sendVerificationEmail",
+        "Code": {
+          "ZipFile": "const AWS = require(\"aws-sdk\");\nexports.handler = async (event) => {\n    const { email } = event;\n    const params = {\n        EmailAddress: email\n    }\n    \n    AWS.config.update({\"region\": \"us-east-1\"});\n    \n    try {\n        const data = await new AWS.SES().verifyEmailIdentity(params).promise();\n        return {\n            statusCode: 200,\n            body: JSON.stringify(data),\n        };\n    } catch(e) {\n        console.error(e);\n        return {\n            statusCode: 400,\n            body: JSON.stringify(e),\n        };\n    }\n};\n"
+        },
+        "Role": "arn:aws:iam::342353252634:role/lambda",
+        "Description": "Lambda Function for sending verification emails",
+        "TracingConfig": {
+          "Mode": "Active"
+        }
+      }
+    },
+    "LambdaSendEmail": {
+      "Type": "AWS::Lambda::Function",
+      "Properties": {
+        "Handler": "index.handler",
+        "Runtime": "nodejs14.x",
+        "FunctionName": "sendEmail",
+        "Code": {
+          "ZipFile": "const AWS = require(\"aws-sdk\");\nexports.handler = async (event) => {\n    const {emails, subject, message} = event;\n    AWS.config.update({\"region\": \"us-east-1\"});\n    const params = {\n        ConfigurationSetName: \"cloud-crowd\",\n        Source: \"dalhousiecloudcrowd37@gmail.com\",\n        Destination: {\n            ToAddresses: emails\n        },\n        Message: {\n            Body: {\n                Html: {\n                    Charset: \"UTF-8\",\n                    Data: message\n                },\n                Text: {\n                    Charset: \"UTF-8\",\n                    Data: message\n                }\n            },\n            Subject: {\n                Charset: 'UTF-8',\n                Data: subject\n            }\n        }\n    };\n    try {\n        const data = await new AWS.SES().sendEmail(params).promise();\n        return {\n            statusCode: 200,\n            body: JSON.stringify(data),\n        };\n    } catch (e) {\n        console.error(e);\n        return {\n            statusCode: 400,\n            body: JSON.stringify(e),\n        };\n    }\n};\n"
+        },
+        "Role": "arn:aws:iam::342353252634:role/lambda",
+        "Description": "Lambda Function for sending emails",
+        "TracingConfig": {
+          "Mode": "Active"
+        }
+      }
+    },
+    "VPC": {
+      "Type": "AWS::EC2::VPC",
+      "Properties": {
+        "CidrBlock": "10.0.0.0/16",
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "cloud-crowd"
+          }
+        ]
+      }
+    },
+    "BeanStalkPublicSubnet": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "AvailabilityZone": {
+          "Fn::Select": [
+            "0",
+            {
+              "Fn::GetAZs": ""
+            }
+          ]
+        },
+        "CidrBlock": "10.0.0.0/24",
+        "MapPublicIpOnLaunch": true,
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "cloud-crowd-beanstalk-public-subnet"
+          }
+        ]
+      },
+      "DependsOn": "VPC"
+    },
+    "URLShortenerPrivateSubnet": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "AvailabilityZone": {
+          "Fn::Select": [
+            "0",
+            {
+              "Fn::GetAZs": ""
+            }
+          ]
+        },
+        "CidrBlock": "10.0.1.0/24",
+        "MapPublicIpOnLaunch": false,
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "cloud-crowd-dynamodb-private-subnet-1"
+          }
+        ]
+      },
+      "DependsOn": "VPC"
+    },
+    "URLShortenerPrivateSubnet2": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "AvailabilityZone": {
+          "Fn::Select": [
+            "0",
+            {
+              "Fn::GetAZs": ""
+            }
+          ]
+        },
+        "CidrBlock": "10.0.2.0/24",
+        "MapPublicIpOnLaunch": false,
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "cloud-crowd-dynamodb-private-subnet-2"
+          }
+        ]
+      },
+      "DependsOn": "URLShortenerPrivateSubnet"
+    },
+    "InternetGateway": {
+      "Type": "AWS::EC2::InternetGateway"
+    },
+    "GatewayToInternet": {
+      "Type": "AWS::EC2::VPCGatewayAttachment",
+      "Properties": {
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "InternetGatewayId": {
+          "Ref": "InternetGateway"
+        }
+      }
+    },
+    "PublicRouteTable": {
+      "Type": "AWS::EC2::RouteTable",
+      "Properties": {
+        "VpcId": {
+          "Ref": "VPC"
+        }
+      }
+    },
+    "PublicRoute": {
+      "Type": "AWS::EC2::Route",
+      "DependsOn": "GatewayToInternet",
+      "Properties": {
+        "RouteTableId": {
+          "Ref": "PublicRouteTable"
+        },
+        "DestinationCidrBlock": "0.0.0.0/0",
+        "GatewayId": {
+          "Ref": "InternetGateway"
+        }
+      }
+    },
+    "BeanStalkPublicSubnetRouteTableAssociation": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "SubnetId": {
+          "Ref": "BeanStalkPublicSubnet"
+        },
+        "RouteTableId": {
+          "Ref": "PublicRouteTable"
+        }
+      }
+    },
+    "NatGateway": {
+      "Type": "AWS::EC2::NatGateway",
+      "DependsOn": "NatPublicIP",
+      "Properties": {
+        "SubnetId": {
+          "Ref": "BeanStalkPublicSubnet"
+        },
+        "AllocationId": {
+          "Fn::GetAtt": [
+            "NatPublicIP",
+            "AllocationId"
+          ]
+        }
+      }
+    },
+    "NatPublicIP": {
+      "Type": "AWS::EC2::EIP",
+      "DependsOn": "VPC",
+      "Properties": {
+        "Domain": "vpc"
+      }
+    },
+    "PrivateRouteTable": {
+      "Type": "AWS::EC2::RouteTable",
+      "Properties": {
+        "VpcId": {
+          "Ref": "VPC"
+        }
+      }
+    },
+    "PrivateRoute": {
+      "Type": "AWS::EC2::Route",
+      "Properties": {
+        "NatGatewayId": {
+          "Ref": "NatGateway"
+        },
+        "RouteTableId": {
+          "Ref": "PrivateRouteTable"
+        },
+        "DestinationCidrBlock": "0.0.0.0/0"
+      }
+    },
+    "URLShortenerPrivateSubnetRouteTableAssociation": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "SubnetId": {
+          "Ref": "URLShortenerPrivateSubnet"
+        },
+        "RouteTableId": {
+          "Ref": "PrivateRouteTable"
+        }
+      }
+    },
+    "URLShortenerPrivateSubnet2RouteTableAssociation": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "SubnetId": {
+          "Ref": "URLShortenerPrivateSubnet2"
+        },
+        "RouteTableId": {
+          "Ref": "PrivateRouteTable"
+        }
+      }
+    },
+    "CloudCrowdPublicSecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "Public Security group for public access EC2",
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 22,
+            "ToPort": 22,
+            "CidrIp": "0.0.0.0/0"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 80,
+            "ToPort": 80,
+            "CidrIp": "0.0.0.0/0"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 443,
+            "ToPort": 443,
+            "CidrIp": "0.0.0.0/0"
+          }
+        ],
+        "SecurityGroupEgress": {
+          "IpProtocol": -1,
+          "FromPort": 0,
+          "ToPort": 65535,
+          "CidrIp": "0.0.0.0/0"
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "cloud-crowd-public-security-group"
+          }
+        ]
+      }
+    },
+    "CloudCrowdPrivateSecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "Private Security group for private access DynamoDb",
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 443,
+            "ToPort": 443,
+            "SourceSecurityGroupId": {
+              "Fn::GetAtt": [
+                "CloudCrowdPublicSecurityGroup",
+                "GroupId"
+              ]
+            }
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 80,
+            "ToPort": 80,
+            "SourceSecurityGroupId": {
+              "Fn::GetAtt": [
+                "CloudCrowdPublicSecurityGroup",
+                "GroupId"
+              ]
+            }
+          }
+        ],
+        "SecurityGroupEgress": {
+          "IpProtocol": -1,
+          "FromPort": 0,
+          "ToPort": 65535,
+          "CidrIp": "0.0.0.0/0"
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "cloud-crowd-private-security-group"
+          }
+        ]
+      }
+    },
+    "DynamoDbSubnetGroup": {
+      "Type": "AWS::DAX::SubnetGroup",
+      "Properties": {
+        "SubnetGroupName": "dynamodb-subnet-group",
+        "Description": "Description of Dynamodb subnet group",
+        "SubnetIds": [
+          {
+            "Ref": "URLShortenerPrivateSubnet"
+          },
+          {
+            "Ref": "URLShortenerPrivateSubnet2"
+          }
+        ]
+      }
+    },
+    "IAM": {
+      "Type": "AWS::IAM::ManagedPolicy",
+      "Properties": {
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "VisualEditor0",
+              "Effect": "Deny",
+              "Action": "dynamodb:*",
+              "Resource": "arn:aws:dynamodb:*:342353252634:table/*",
+              "Condition": {
+                "StringNotEquals": {
+                  "aws:SourceVpc": {
+                    "Ref": "VPC"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "ManagedPolicyName": "cloudcrowd",
+        "Users": [
+          "cloud-crowd"
+        ]
+      }
+    }
+  }
+}
